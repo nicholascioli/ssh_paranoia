@@ -1,0 +1,67 @@
+#!/bin/ruby
+#
+# Given a log file, extracts all ssh attempts and
+# prints out statistics as to where those attempts
+# are located
+# Note: only works for IPv4 (for now)
+
+# Includes
+require 'net/http'
+
+# Globals
+ip_patt = /[1-9][0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/
+ips = Array.new()
+light_ips = Hash.new()
+countries = Hash.new()
+total = 0
+
+ARGV.each do |arg|
+
+	if (File.exist?(arg))
+
+		# Open the file
+		puts "Opening file #{arg}..."
+		File.open(arg, "r") do |file|
+			file.each do |line|
+				if (line.match(ip_patt))
+					ips.push line.match(ip_patt)
+				end
+			end
+		end
+
+		# Try to reduce the amount of HTTP get requests by compacting the set
+		# of IPs. (Compact doubles onto themselves)
+		puts "Extracting data..."
+		ips.each do |ip|
+			if (!light_ips[ip.to_s])
+				light_ips[ip.to_s] = 0
+			end
+
+			light_ips[ip.to_s] += 1
+			total += 1
+		end
+
+		# Request the geolocation of the IPs extracted earlier
+		# Note: Geolocating is done using the public geolocating API found at
+		# http://freegeoip.net/ (Code for which is found at https://github.com/fiorix/freegeoip)
+		puts "Gathering Geo Info (This might take a while)..."
+		light_ips.each do |ip, count|
+			res = Net::HTTP.get(URI("http://freegeoip.net/csv/#{ip}")).split(',')
+
+			if (!countries[res[2]])
+				countries[res[2]] = 0
+			end
+
+			countries[res[2]] += count
+		end
+
+		# Print the results
+		puts "--- GEO RESULTS ---"
+		countries.each do |place, count|
+			puts "#{place} : #{count} (#{(100 * (count.to_f / total)).round(2)}%)"
+		end
+
+		puts "--- Total of #{total} attempted connections made ---"
+	end
+
+end
